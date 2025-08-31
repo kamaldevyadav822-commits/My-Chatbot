@@ -11,8 +11,8 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ Serve all files from "frontend" folder
-app.use(express.static(path.join(__dirname, "frontend")));
+// ✅ Serve static files from project root
+app.use(express.static(__dirname));
 
 // ✅ API route for session
 app.get("/session", async (req, res) => {
@@ -35,9 +35,9 @@ app.get("/session", async (req, res) => {
   }
 });
 
-// ✅ Fallback route - always send index.html
+// ✅ Fallback route for all other requests
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "frontend", "index.html"));
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.listen(PORT, () => {
