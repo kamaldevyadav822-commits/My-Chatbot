@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Realtime Chatbot</title>
+  <style>
+    body { font-family: Arial; background: #f9f9f9; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 20px auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    h1 { text-align: center; }
+    #chatBox { height: 300px; overflow-y: auto; background: #f0f0f0; padding: 10px; border-radius: 5px; }
+    .message { margin: 5px 0; }
+    .user { color: blue; }
+    .assistant { color: green; }
+    input, button { padding: 10px; border: none; border-radius: 5px; }
+    input { flex: 1; border: 1px solid #ddd; }
+    button { background: black; color: white; cursor: pointer; margin-left: 5px; }
+    .controls { display: flex; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Realtime Chatbot</h1>
+    <audio id="remoteAudio" autoplay playsinline></audio>
+    <div id="chatBox"></div>
+    <div class="controls">
+      <input type="text" id="textInput" placeholder="Type a message...">
+      <button onclick="sendText()">Send</button>
+      <button onclick="toggleMic()">🎤</button>
+    </div>
+    <button onclick="connect()">Connect</button>
+  </div>
+
+  <script>
+    const SERVER_URL = ""; // Leave blank, frontend served by same backend
+    let pc, dc, stream;
+    const chatBox = document.getElementById("chatBox");
+    const audioEl = document.getElementById("remoteAudio");
+
+    async function connect() {
+      const resp = await fetch(SERVER_URL + "/session", { method: "POST" });
+      const { client_secret } = await resp.json();
+      const token = client_secret?.value;
+
+      pc = new RTCPeerConnection();
+      pc.ontrack = e => audioEl.srcObject = e.streams[0];
+      dc = pc.createDataChannel("oai-events");
+      dc.onmessage = e => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === "response.delta") addMsg("assistant", msg.delta);
+      };
+
+      pc.addTransceiver("audio", { direction: "recvonly" });
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const sdp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17", {
+        method: "POST",
+        body: offer.sdp,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/sdp" }
+      }).then(r => r.text());
+
+      await pc.setRemoteDescription({ type: "answer", sdp });
+      addMsg("system", "Connected to AI");
+    }
+
+    function sendText() {
+      const input = document.getElementById("textInput");
+      const txt = input.value;
+      if (!txt || !dc) return;
+      dc.send(JSON.stringify({ type: "response.create", response: { instructions: txt } }));
+      addMsg("user", txt);
+      input.value = "";
+    }
+
+    async function toggleMic() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+        return;
+      }
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    }
+
+    function addMsg(role, text) {
+      const div = document.createElement("div");
+      div.className = `message ${role}`;
+      div.textContent = `${role}: ${text}`;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+  </script>
+</body>
+</html>
