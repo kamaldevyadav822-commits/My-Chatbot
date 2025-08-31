@@ -11,31 +11,36 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ Serve static files from project root
+app.use(express.json()); // ✅ To read JSON from frontend
 app.use(express.static(__dirname));
 
-// ✅ API route for session
-app.get("/session", async (req, res) => {
+// ✅ Chat endpoint for text messages
+app.post("/chat", async (req, res) => {
   try {
-    const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
+    const userMessage = req.body.message;
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-realtime-preview-2024-12-17",
-        voice: "verse",
+        model: "gpt-4o-mini", 
+        messages: [{ role: "user", content: userMessage }],
       }),
     });
+
     const data = await response.json();
-    res.json(data);
+    const reply = data.choices?.[0]?.message?.content || "⚠️ No reply";
+    res.json({ reply });
   } catch (err) {
-    res.status(500).json({ error: "Failed to create session" });
+    console.error(err);
+    res.status(500).json({ error: "Chat request failed" });
   }
 });
 
-// ✅ Fallback route for all other requests
+// ✅ Fallback route for SPA
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
